@@ -1,4 +1,4 @@
-package main
+package controllers
 
 import (
 	"encoding/json"
@@ -6,36 +6,34 @@ import (
 	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
+	"web-development/domain/entities"
+	"web-development/domain/usecases"
+	"web-development/repositories"
 )
 
-type Book struct {
-	Title      string `json:"title"`
-	NoOfPages  int    `json:"no_of_pages"`
-	AuthorName string `json:"author_name"`
+type BookControllers struct {
+	BookUseCase usecases.BookUseCase
 }
 
-var BookStore = map[int]Book{}
-var id = 1
+func NewBookController(bookRepository repositories.BookRepository) BookControllers {
+	bookUseCase := usecases.BookUseCase{
+		BookRepository: bookRepository,
+	}
 
-func main() {
-	r := mux.NewRouter()
-
-	r.HandleFunc("/book", getAllBook).Methods("GET")
-	r.HandleFunc("/book/{id}", getBookById).Methods("GET")
-	r.HandleFunc("/book", addBook).Methods("POST")
-	r.HandleFunc("/book/{id}", updateBook).Methods("PUT")
-	r.HandleFunc("/book/{id}", deleteBook).Methods("DELETE")
-
-	_ = http.ListenAndServe(":8080", r)
+	return BookControllers{
+		BookUseCase: bookUseCase,
+	}
 }
 
-func getAllBook(w http.ResponseWriter, r *http.Request) {
+func (bc BookControllers) GetAllBooks(w http.ResponseWriter, r *http.Request) {
+	books := bc.BookUseCase.GetAllBooks()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	_ = json.NewEncoder(w).Encode(BookStore)
+	_ = json.NewEncoder(w).Encode(books)
 }
 
-func getBookById(w http.ResponseWriter, r *http.Request) {
+func (bc BookControllers) GetSingleBook(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 
@@ -46,12 +44,12 @@ func getBookById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	book, ok := BookStore[id]
+	book, err := bc.BookUseCase.GetSingleBook(uint(id))
 
-	if !ok {
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(403)
-		_, _ = w.Write([]byte(fmt.Sprintf("book does not exists. id: %d", id)))
+		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
 
@@ -60,10 +58,10 @@ func getBookById(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(book)
 }
 
-func addBook(w http.ResponseWriter, r *http.Request) {
+func (bc BookControllers) AddBook(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 
-	book := Book{}
+	book := entities.Book{}
 
 	err := decoder.Decode(&book)
 
@@ -74,16 +72,22 @@ func addBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	BookStore[id] = book
-	id += 1
+	id, err := bc.BookUseCase.AddBook(book)
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(err.Error()))
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
-	_, _ = w.Write([]byte(fmt.Sprintf("book created. id: %d", id-1)))
+	_, _ = w.Write([]byte(fmt.Sprintf("book created. id: %d", id)))
 	return
 }
 
-func updateBook(w http.ResponseWriter, r *http.Request) {
+func (bc BookControllers) UpdateBook(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 
@@ -94,18 +98,9 @@ func updateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := BookStore[id]
-
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(403)
-		_, _ = w.Write([]byte(fmt.Sprintf("book does not exists. id: %d", id)))
-		return
-	}
-
 	decoder := json.NewDecoder(r.Body)
 
-	book := Book{}
+	book := entities.Book{}
 
 	err = decoder.Decode(&book)
 
@@ -116,15 +111,22 @@ func updateBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	BookStore[id] = book
+	bookId, err := bc.BookUseCase.UpdateBook(uint(id), book)
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(err.Error()))
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
-	_, _ = w.Write([]byte(fmt.Sprintf("book updated. id: %d", id)))
+	_, _ = w.Write([]byte(fmt.Sprintf("book updated. id: %d", bookId)))
 	return
 }
 
-func deleteBook(w http.ResponseWriter, r *http.Request) {
+func (bc BookControllers) DeleteBook(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 
@@ -135,19 +137,17 @@ func deleteBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := BookStore[id]
+	bookId, err := bc.BookUseCase.DeleteBook(uint(id))
 
-	if !ok {
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(403)
-		_, _ = w.Write([]byte(fmt.Sprintf("book does not exists. id: %d", id)))
+		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
 
-	delete(BookStore, id)
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
-	_, _ = w.Write([]byte(fmt.Sprintf("book deleted. id: %d", id)))
+	_, _ = w.Write([]byte(fmt.Sprintf("book deleted. id: %d", bookId)))
 	return
 }
