@@ -9,12 +9,12 @@ import (
 )
 
 type Book struct {
-	title string `json:"title"`
-	noOfPages int `json:"no_of_pages"`
-	authorName string `json:"author_name"`
+	Title      string `json:"title"`
+	NoOfPages  int    `json:"no_of_pages"`
+	AuthorName string `json:"author_name"`
 }
 
-var BookStore = map[int]Book {}
+var BookStore = map[int]Book{}
 var id = 1
 
 func main() {
@@ -26,13 +26,13 @@ func main() {
 	r.HandleFunc("/book/{id}", updateBook).Methods("PUT")
 	r.HandleFunc("/book/{id}", deleteBook).Methods("DELETE")
 
-	http.ListenAndServe(":8080", r)
+	_ = http.ListenAndServe(":8080", r)
 }
 
 func getAllBook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(BookStore)
+	_ = json.NewEncoder(w).Encode(BookStore)
 }
 
 func getBookById(w http.ResponseWriter, r *http.Request) {
@@ -42,15 +42,22 @@ func getBookById(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(403)
-		w.Write([]byte(err.Error()))
+		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
 
-	book := BookStore[id]
+	book, ok := BookStore[id]
+
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(fmt.Sprintf("book does not exists. id: %d", id)))
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(book)
+	_ = json.NewEncoder(w).Encode(book)
 }
 
 func addBook(w http.ResponseWriter, r *http.Request) {
@@ -59,12 +66,11 @@ func addBook(w http.ResponseWriter, r *http.Request) {
 	book := Book{}
 
 	err := decoder.Decode(&book)
-	fmt.Println(book)
 
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(403)
-		w.Write([]byte(err.Error()))
+		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
 
@@ -73,14 +79,75 @@ func addBook(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
-	w.Write([]byte(fmt.Sprintf("book created. id: %d", id -1)))
+	_, _ = w.Write([]byte(fmt.Sprintf("book created. id: %d", id-1)))
 	return
 }
 
 func updateBook(w http.ResponseWriter, r *http.Request) {
-	//
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(err.Error()))
+		return
+	}
+
+	_, ok := BookStore[id]
+
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(fmt.Sprintf("book does not exists. id: %d", id)))
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+
+	book := Book{}
+
+	err = decoder.Decode(&book)
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(err.Error()))
+		return
+	}
+
+	BookStore[id] = book
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, _ = w.Write([]byte(fmt.Sprintf("book updated. id: %d", id)))
+	return
 }
 
 func deleteBook(w http.ResponseWriter, r *http.Request) {
-	//
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(err.Error()))
+		return
+	}
+
+	_, ok := BookStore[id]
+
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(fmt.Sprintf("book does not exists. id: %d", id)))
+		return
+	}
+
+	delete(BookStore, id)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, _ = w.Write([]byte(fmt.Sprintf("book deleted. id: %d", id)))
+	return
 }
